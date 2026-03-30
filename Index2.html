@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Расписание занятий</title>
+<style>
+body { font-family: Arial; margin: 0; background: linear-gradient(135deg, #667eea, #764ba2); }
+.container { max-width:1000px; margin:auto; background:#fff; padding:15px; border-radius:10px; margin-top:15px; }
+h1 { text-align:center; }
+.topbar { display:flex; flex-wrap:wrap; justify-content:space-between; }
+select, button, input { padding:8px; margin:5px; border-radius:6px; border:none; }
+button { background:#667eea; color:white; cursor:pointer; }
+table { width:100%; border-collapse:collapse; margin-top:10px; }
+th { background:#667eea; color:white; }
+th, td { border:1px solid #ddd; padding:8px; text-align:center; }
+td.time { background:#eef; font-weight:bold; }
+td.editable { cursor:pointer; }
+.login { text-align:center; margin-top:100px; }
+@media(max-width:768px){ .topbar{flex-direction:column;} button, select, input{width:100%;} table{font-size:12px;} }
+</style>
+</head>
+<body>
+
+<div id="login" class="login">
+<h1>Вход</h1>
+<button onclick="enterStudent()">Студент</button><br><br>
+<input type="password" id="pass" placeholder="Пароль преподавателя">
+<button onclick="enterTeacher()">Войти как преподаватель</button>
+</div>
+
+<div id="app" style="display:none;">
+<div class="container">
+<h1>📅 Расписание занятий</h1>
+<div class="topbar">
+<div>
+<b id="roleText"></b><br>
+<label>Курс:</label>
+<select id="course" onchange="updateGroups()">
+<option value="1">1 курс</option>
+<option value="2">2 курс</option>
+<option value="3">3 курс</option>
+<option value="4">4 курс</option>
+</select>
+<label>Группа:</label>
+<select id="group" onchange="loadSchedule()"></select>
+</div>
+<div>
+<button onclick="logout()">Выйти</button>
+</div>
+</div>
+
+<table id="table">
+<thead>
+<tr>
+<th>Время</th>
+<th>Пн</th>
+<th>Вт</th>
+<th>Ср</th>
+<th>Чт</th>
+<th>Пт</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
+</div>
+</div>
+
+<script>
+let role = "student";
+
+// ===== ВРЕМЯ ПАР =====
+function getTimes(){
+    const saved = localStorage.getItem("lesson_times");
+    return saved ? JSON.parse(saved) : ["09:00","10:05","11:10","12:15"];
+}
+
+function saveTimes(times){
+    localStorage.setItem("lesson_times", JSON.stringify(times));
+}
+
+// ===== ВХОД =====
+function enterStudent(){ role="student"; startApp(); }
+function enterTeacher(){
+    if(document.getElementById("pass").value==="321"){ role="teacher"; startApp(); }
+    else alert("Неверный пароль");
+}
+function startApp(){
+    document.getElementById("login").style.display="none";
+    document.getElementById("app").style.display="block";
+    document.getElementById("roleText").innerText = role==="teacher" ? "Роль: преподаватель" : "Роль: студент";
+    updateGroups();
+}
+function logout(){ location.reload(); }
+
+// ===== ГРУППЫ =====
+function updateGroups(){
+    const groupSelect=document.getElementById("group");
+    groupSelect.innerHTML="";
+    for(let i=1;i<=4;i++){
+        let opt=document.createElement("option");
+        opt.value="g"+i;
+        opt.textContent="Группа "+i;
+        groupSelect.appendChild(opt);
+    }
+    loadSchedule();
+}
+
+// ===== КЛЮЧ =====
+function getKey(){
+    const c=document.getElementById("course").value;
+    const g=document.getElementById("group").value;
+    return "schedule_"+c+"_"+g;
+}
+
+// ===== ДЕФОЛТ =====
+function defaultSchedule(){
+    return getTimes().map(time=>[time,"","","","",""]);
+}
+
+// ===== ЗАГРУЗКА =====
+function loadSchedule(){
+    const key=getKey();
+    const saved=localStorage.getItem(key);
+    const data=saved ? JSON.parse(saved) : defaultSchedule();
+    const tbody=document.querySelector("#table tbody");
+    tbody.innerHTML="";
+    data.forEach((row,rowIndex)=>{
+        let tr=document.createElement("tr");
+        row.forEach((cell,colIndex)=>{
+            let td=document.createElement("td");
+            td.innerText=cell;
+            if(colIndex===0){
+                td.className="time";
+                if(role==="teacher"){ td.classList.add("editable"); td.onclick=()=>editTime(td,rowIndex); }
+            } else if(role==="teacher"){
+                td.className="editable";
+                td.onclick=()=>editCell(td,rowIndex,colIndex);
+            }
+            tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+    });
+}
+
+// ===== РЕДАКТИРОВАНИЕ ПРЕДМЕТОВ =====
+function editCell(td,rowIndex,colIndex){
+    const input=document.createElement("input");
+    input.value=td.innerText;
+    input.style.width="100%";
+    td.innerText="";
+    td.appendChild(input);
+    input.focus();
+    input.onblur=()=>saveCell(td,rowIndex,colIndex,input.value);
+    input.onkeydown=e=>{if(e.key==="Enter") saveCell(td,rowIndex,colIndex,input.value);}
+}
+function saveCell(td,rowIndex,colIndex,value){
+    td.innerText=value;
+    const key=getKey();
+    let schedule=localStorage.getItem(key);
+    schedule=schedule ? JSON.parse(schedule) : defaultSchedule();
+    schedule[rowIndex][colIndex]=value;
+    localStorage.setItem(key,JSON.stringify(schedule));
+}
+
+// ===== РЕДАКТИРОВАНИЕ ВРЕМЕНИ =====
+function editTime(td,rowIndex){
+    const input=document.createElement("input");
+    input.value=td.innerText;
+    input.style.width="100%";
+    td.innerText="";
+    td.appendChild(input);
+    input.focus();
+    input.onblur=()=>saveTime(td,rowIndex,input.value);
+    input.onkeydown=e=>{if(e.key==="Enter") saveTime(td,rowIndex,input.value);}
+}
+function saveTime(td,rowIndex,value){
+    if(!/^[0-2]\d:[0-5]\d$/.test(value)){
+        alert("Неверный формат времени! Используйте HH:MM");
+        td.innerText=getTimes()[rowIndex];
+        return;
+    }
+    // обновляем глобальное время
+    let times=getTimes();
+    times[rowIndex]=value;
+    saveTimes(times);
+    // обновляем текущее расписание
+    const key=getKey();
+    let schedule=localStorage.getItem(key);
+    schedule=schedule ? JSON.parse(schedule) : defaultSchedule();
+    schedule[rowIndex][0]=value;
+    localStorage.setItem(key,JSON.stringify(schedule));
+    td.innerText=value;
+    loadSchedule();
+}
+</script>
+
+</body>
+</html>
